@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -49,6 +49,59 @@ export default function Home() {
   const [status, setStatus] = useState<string | null>(null);
 
   /* =========================
+     CLOSE VAULT
+  ========================= */
+  const closeVault = useCallback(() => {
+    if (dirty) {
+      const ok = confirm("Unsaved changes will be lost. Close anyway?");
+      if (!ok) return;
+    }
+
+    setVaultOpen(false);
+    setPassword("");
+    setContent("");
+    setDirty(false);
+    setStatus(null);
+  }, [dirty]);
+
+  /* =========================
+     SAVE
+  ========================= */
+  const saveNote = useCallback(
+    async (closeAfter = false) => {
+      try {
+        setStatus("Saving…");
+
+        const payload = content; // freeze content
+
+        const res = await fetch(`${API}/api/note`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password, content: payload }),
+        });
+
+        if (!res.ok) {
+          setStatus("Save failed");
+          return;
+        }
+
+        setDirty(false);
+        setStatus("Saved");
+
+        // ✅ CLOSE ONLY AFTER SAVE COMPLETES
+        if (closeAfter) {
+          setTimeout(() => {
+            closeVault();
+          }, 0);
+        }
+      } catch {
+        setStatus("Save error");
+      }
+    },
+    [API, content, password, closeVault]
+  );
+
+  /* =========================
      OPEN VAULT
   ========================= */
   async function openVault() {
@@ -83,56 +136,6 @@ export default function Home() {
   }
 
   /* =========================
-     SAVE
-  ========================= */
-async function saveNote(closeAfter = false) {
-  try {
-    setStatus("Saving…");
-
-    const payload = content; // freeze content
-
-    const res = await fetch(`${API}/api/note`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password, content: payload }),
-    });
-
-    if (!res.ok) {
-      setStatus("Save failed");
-      return;
-    }
-
-    setDirty(false);
-    setStatus("Saved");
-
-    // ✅ CLOSE ONLY AFTER SAVE COMPLETES
-    if (closeAfter) {
-      setTimeout(() => {
-        closeVault();
-      }, 0);
-    }
-  } catch {
-    setStatus("Save error");
-  }
-}
-
-  /* =========================
-     CLOSE VAULT
-  ========================= */
-  function closeVault() {
-    if (dirty) {
-      const ok = confirm("Unsaved changes will be lost. Close anyway?");
-      if (!ok) return;
-    }
-
-    setVaultOpen(false);
-    setPassword("");
-    setContent("");
-    setDirty(false);
-    setStatus(null);
-  }
-
-  /* =========================
      KEYBOARD SHORTCUTS
   ========================= */
   useEffect(() => {
@@ -158,7 +161,7 @@ async function saveNote(closeAfter = false) {
 
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [vaultOpen, content]);
+  }, [vaultOpen, saveNote, closeVault]);
 
   return (
     <main className="min-h-screen bg-slate-100 flex items-center justify-center p-6">
